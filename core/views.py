@@ -1,22 +1,16 @@
-# Smart_Invent/core/views.py
-
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Sum, Count # <--- Ensure both are imported here
-from django.utils import timezone # <--- Ensure this is imported here
-
+from django.db.models import Sum, Count
+from django.utils import timezone
 from .models import Product, Category, Sale, SaleItem
 from .forms import ProductForm, CustomUserCreationForm, SaleForm, SaleItemFormSet
 
-
-# Home page view (publicly accessible)
 def index(request):
     return render(request, 'index.html')
 
 
-# Dashboard View (requires login)
 @login_required
 def dashboard(request):
     # Current month's data
@@ -45,7 +39,6 @@ def dashboard(request):
     low_stock_count = low_stock_products.count()
 
     # Recently added products
-    # CORRECTED FIELD NAME: Changed 'date_added' to 'created_at'
     recent_products = Product.objects.all().order_by('-created_at')[:5]
 
     # Recent sales
@@ -132,14 +125,14 @@ def delete_product(request, pk):
     return render(request, 'products/product_confirm_delete.html', context)
 
 
-# User Registration view (publicly accessible)
+
 def register(request):
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            login(request, user)  # Log the user in immediately after registration
-            return redirect('index')  # Redirect to home page or dashboard
+            login(request, user)
+            return redirect('index')
     else:
         form = CustomUserCreationForm()
 
@@ -150,63 +143,41 @@ def register(request):
     return render(request, 'registration/register.html', context)
 
 
-# Record Sale view (requires login)
 @login_required
 def record_sale(request):
     if request.method == 'POST':
         form = SaleForm(request.POST)
-        formset = SaleItemFormSet(request.POST, request.FILES, prefix='sale_items')
+        formset = SaleItemFormSet(request.POST, prefix='sale_items')
 
         if form.is_valid() and formset.is_valid():
             try:
-                with transaction.atomic():  # Ensures all database operations succeed or fail together
+
+                with transaction.atomic():
                     sale = form.save(commit=False)
-                    sale.total_amount = 0  # Initialize total_amount
+                    sale.user = request.user  # Assign the logged-in user
                     sale.save()
 
-                    for item_form in formset:
-                        # Only process forms that have data and are not marked for deletion (if they were existing)
-                        if item_form.has_changed() and not item_form.instance.pk:
-                            sale_item = item_form.save(commit=False)
-                            product = sale_item.product
-                            quantity = sale_item.quantity
+                    # Link the items to the sale and save them
+                    # The Model's save() method (updated below) will handle stock & totals
+                    instances = formset.save(commit=False)
+                    for instance in instances:
+                        instance.sale = sale
+                        instance.save()
 
-                            if product.stock_quantity < quantity:
-                                item_form.add_error('quantity',
-                                                    f"Not enough stock for {product.name}. Available: {product.stock_quantity}")
-                                raise ValueError(f"Insufficient stock for {product.name}")
+                    sale.update_total()
 
-                            product.stock_quantity -= quantity
-                            product.save()
+                return redirect('sale_list')
 
-                            sale_item.sale = sale
-                            sale_item.price_at_sale = product.price  # Record the price at the time of sale
-                            sale_item.save()
-
-                            sale.total_amount += (sale_item.price_at_sale * quantity)
-
-                    sale.save()  # Save the sale again to update the total_amount
-
-                return redirect('product_list')  # Or 'sale_list' once it's fully ready
-
-            except ValueError as e:
-                # Stock validation error, re-render form with specific error message
-                pass
+            except ValidationError as e:
+                form.add_error(None, e.message)
             except Exception as e:
-                # Catch any other unexpected errors during transaction
-                form.add_error(None, f"An unexpected error occurred: {e}")
+                form.add_error(None, f"Critical System Error: {e}")
 
-    else:  # GET request
+    else:
         form = SaleForm()
-        formset = SaleItemFormSet(prefix='sale_items')  # Initialize with prefix for consistency
+        formset = SaleItemFormSet(prefix='sale_items')
 
-    context = {
-        'form': form,
-        'formset': formset,
-        'title': 'Record New Sale'
-    }
-    return render(request, 'sales/record_sale.html', context)
-
+    return render(request, 'sales/record_sale.html', {'form': form, 'formset': formset})
 
 # Sale List view (requires login)
 @login_required
@@ -219,7 +190,6 @@ def sale_list(request):
     return render(request, 'sales/sale_list.html', context)
 
 
-# Sale Detail view (requires login)
 @login_required
 def sale_detail(request, pk):
     sale = get_object_or_404(Sale, pk=pk)  # Get specific sale or return 404

@@ -1,8 +1,26 @@
-# Smart_Invent/core/forms.py
+
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.forms import inlineformset_factory
 from .models import Product, Category, Sale, SaleItem
+from django.forms import BaseInlineFormSet
+from django.core.exceptions import ValidationError
+
+class BaseSaleItemFormSet(BaseInlineFormSet):
+    def clean(self):
+        """Checks for duplicate products in the same sale."""
+        super().clean()
+        if any(self.errors):
+            return
+
+        products = []
+        for form in self.forms:
+            if self.can_delete and self._should_delete_form(form):
+                continue
+            product = form.cleaned_data.get('product')
+            if product in products:
+                raise ValidationError(f"You have listed {product} more than once.")
+            products.append(product)
 
 class ProductForm(forms.ModelForm):
     category = forms.ModelChoiceField(
@@ -30,15 +48,12 @@ class CustomUserCreationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
         fields = UserCreationForm.Meta.fields
 
-# Corrected Sale Form
+
 class SaleForm(forms.ModelForm):
     class Meta:
         model = Sale
-        # If  a 'customer_name' field in your Sale model that you wanted users to input,
-        # add it here, e.g., fields = ['customer_name']
-        fields = [] # <-- This is the key change: empty list as no user input fields for Sale itself.
-        # No need for widgets if there are no fields for user input in this form.
-        # If you had other fields, you'd define widgets for them here.
+
+        fields = []
 
 # New Sale Item Form
 class SaleItemForm(forms.ModelForm):
@@ -61,6 +76,7 @@ SaleItemFormSet = inlineformset_factory(
     Sale,
     SaleItem,
     form=SaleItemForm,
+    formset=BaseSaleItemFormSet,
     extra=1,
     can_delete=True,
     fields=['product', 'quantity']

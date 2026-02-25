@@ -36,7 +36,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'Smart_Invent.urls'
+ROOT_URLCONF = 'sales_inventory_system.urls'
 
 TEMPLATES = [
     {
@@ -54,7 +54,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'Smart_Invent.wsgi.application'
+WSGI_APPLICATION = 'sales_inventory_system.wsgi.application'
 
 
 # Database

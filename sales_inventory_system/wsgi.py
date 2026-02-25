@@ -1,5 +1,5 @@
 """
-WSGI config for Smart_Invent project.
+WSGI config for sales_inventory_system project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
@@ -11,6 +11,6 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Smart_Invent.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sales_inventory_system.settings')
 
 application = get_wsgi_application()

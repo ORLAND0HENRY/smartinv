@@ -1,30 +1,52 @@
-{# sales_inventory_system/core/templates/products/product_form.html #}
 {% extends 'base.html' %}
-
-{% block title %}{{ title }} - Inventory System{% endblock %}
+{% block title %}{{ title }} | Orlantech Innovations{% endblock %}
 
 {% block content %}
-    <h1 class="mb-4">{{ title }}</h1>
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <div class="card border-0 shadow-sm border-top border-amber border-4">
+                <div class="card-body p-4">
+                    <h2 class="h4 fw-bold mb-4 text-dark">
+                        {% if product %}
+                            <i class="bi bi-pencil-square text-amber me-2"></i>Edit Product
+                        {% else %}
+                            <i class="bi bi-plus-circle-dotted text-amber me-2"></i>Add New Product
+                        {% endif %}
+                    </h2>
 
-    <div class="card p-4 shadow-sm">
-        <form method="post">
-            {% csrf_token %} {# Django security token for forms #}
+                    <form method="post" novalidate>
+                        {% csrf_token %}
 
-            {% for field in form %}
-                <div class="mb-3">
-                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                    {{ field }}
-                    {% if field.help_text %}
-                        <div class="form-text text-muted">{{ field.help_text }}</div>
-                    {% endif %}
-                    {% for error in field.errors %}
-                        <div class="invalid-feedback d-block">{{ error }}</div>
-                    {% endfor %}
+                        {% for field in form %}
+                            <div class="mb-3">
+                                <label for="{{ field.id_for_label }}" class="form-label small fw-bold text-secondary">
+                                    {{ field.label }}
+                                </label>
+                                {{ field }}
+                                {% if field.errors %}
+                                    <div class="text-danger small mt-1">
+                                        {{ field.errors|striptags }}
+                                    </div>
+                                {% endif %}
+                                {% if field.help_text %}
+                                    <div class="form-text small">{{ field.help_text }}</div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-amber btn-lg">
+                                <i class="bi bi-check2-circle me-1"></i> Save Product
+                            </button>
+                            <a href="{% url 'product_list' %}" class="btn btn-outline-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
                 </div>
-            {% endfor %}
-
-            <button type="submit" class="btn btn-success me-2">Save Product</button>
-            <a href="{% url 'product_list' %}" class="btn btn-secondary">Cancel</a>
-        </form>
+            </div>
+        </div>
     </div>
+</div>
 {% endblock %}
