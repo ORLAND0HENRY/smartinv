@@ -1,0 +1,167 @@
+{# sales_inventory_system/core/templates/sales/record_sale.html #}
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - Inventory System{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4">{{ title }}</h1>
+
+    <div class="card p-4 shadow-sm">
+        <form method="post">
+            {% csrf_token %}
+
+            {# Non-field errors for the main form or formset #}
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger" role="alert">
+                    {% for error in form.non_field_errors %}
+                        <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            {# Main Sale Form Fields (if any were present in SaleForm.Meta.fields) #}
+            {# As per the fix, SaleForm.Meta.fields is empty, so this loop will render nothing. #}
+            {# If you add fields to SaleForm later (e.g., customer_name), they will appear here. #}
+            {% for field in form %}
+                <div class="mb-3">
+                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}
+                        <div class="form-text text-muted">{{ field.help_text }}</div>
+                    {% endif %}
+                    {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+
+            <hr class="my-4">
+            <h3>Sale Items</h3>
+            <div id="form-container">
+                {# Management form is crucial for formsets #}
+                {{ formset.management_form }} 
+
+                {% for item_form in formset %}
+                    <div class="row mb-3 p-3 border rounded bg-light align-items-end" id="form-{{ forloop.counter0 }}">
+                        {# Hidden field for DELETE, if this were an existing item being edited #}
+                        {% if item_form.instance.pk %}{{ item_form.DELETE }}{% endif %}
+
+                        {# Product Selection Field #}
+                        <div class="col-md-6">
+                            <label for="{{ item_form.product.id_for_label }}" class="form-label">Product</label>
+                            {{ item_form.product }}
+                            {% for error in item_form.product.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        {# Quantity Field #}
+                        <div class="col-md-4">
+                            <label for="{{ item_form.quantity.id_for_label }}" class="form-label">Quantity</label>
+                            {{ item_form.quantity }}
+                            {% for error in item_form.quantity.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        {# Delete Checkbox (will appear if it's an existing item being edited/deleted) #}
+                        <div class="col-md-2 text-end">
+                            {% if item_form.instance.pk %}
+                                <div class="form-check">
+                                    {{ item_form.DELETE }}
+                                    <label class="form-check-label" for="{{ item_form.DELETE.id_for_label }}">Delete</label>
+                                </div>
+                            {% endif %}
+                        </div>
+                        {# Non-field errors for individual formset items #}
+                        {% if item_form.non_field_errors %}
+                            <div class="alert alert-danger col-12 mt-2" role="alert">
+                                {% for error in item_form.non_field_errors %}
+                                    <p>{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            {# Button to add more forms dynamically using JavaScript #}
+            <button type="button" class="btn btn-info mt-3 mb-4" id="add-item-button">Add Another Product</button>
+
+            <button type="submit" class="btn btn-success w-100">Record Sale</button>
+            <a href="{% url 'index' %}" class="btn btn-secondary w-100 mt-2">Cancel</a>
+        </form>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Function to apply Bootstrap classes to a form element's inputs/selects
+        function applyBootstrapClasses(formElement) {
+            formElement.querySelectorAll('select, input[type="number"]').forEach(input => {
+                input.classList.add('form-control');
+            });
+        }
+
+        // Apply to initially loaded forms
+        document.querySelectorAll('#form-container > .row').forEach(formRow => {
+            applyBootstrapClasses(formRow);
+        });
+
+        // --- Dynamic Formset Addition (JavaScript) ---
+        const addButton = document.getElementById('add-item-button');
+        const formContainer = document.getElementById('form-container');
+        const totalForms = document.querySelector('#id_sale_items-TOTAL_FORMS'); // Correct ID for formset total forms
+
+        let formIdx = parseInt(totalForms.value); // Get initial count of forms
+
+        addButton.addEventListener('click', function() {
+            // Clone the FIRST form template (assuming it's always an empty one)
+            // If the first form is potentially pre-filled, a hidden 'empty_form' template is better.
+            // For simplicity now, we clone the first visible form.
+            const newForm = formContainer.children[0].cloneNode(true); 
+
+            // Clear input values and update IDs/names for the new form
+            newForm.querySelectorAll('input, select, textarea').forEach(input => {
+                if (input.type !== 'hidden') { // Don't clear hidden inputs like DELETE or management forms
+                    input.value = ''; // Clear value
+                }
+                if (input.id) {
+                    input.id = input.id.replace(/-\d+-/, `-${formIdx}-`); // Update ID
+                }
+                if (input.name) {
+                    input.name = input.name.replace(/-\d+-/, `-${formIdx}-`); // Update name
+                }
+                // Ensure DELETE checkbox is unchecked for new forms
+                if (input.type === 'checkbox' && input.name.includes('DELETE')) {
+                    input.checked = false;
+                }
+            });
+
+            // Update labels' 'for' attribute
+            newForm.querySelectorAll('label').forEach(label => {
+                if (label.htmlFor) {
+                    label.htmlFor = label.htmlFor.replace(/-\d+-/, `-${formIdx}-`);
+                }
+            });
+
+            // Update the form's ID (e.g., id="form-0")
+            if (newForm.id) {
+                newForm.id = `form-${formIdx}`;
+            }
+
+            // Append the new form to the container
+            formContainer.appendChild(newForm);
+
+            // Apply Bootstrap classes to the newly added form
+            applyBootstrapClasses(newForm);
+
+            // Increment TOTAL_FORMS count in the management form
+            totalForms.value = parseInt(totalForms.value) + 1;
+            formIdx++; // Increment our local counter
+        });
+        // --- End Dynamic Formset Addition ---
+    });
+</script>
+{% endblock %}

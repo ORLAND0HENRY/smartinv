@@ -1,0 +1,20 @@
+{# sales_inventory_system/core/templates/products/product_confirm_delete.html #}
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - Inventory System{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4 text-danger">Confirm Deletion</h1>
+
+    <div class="alert alert-warning" role="alert">
+        Are you sure you want to delete the product: <strong>"{{ product.name }}"</strong> (SKU: {{ product.sku }})?
+        <br>
+        This action cannot be undone.
+    </div>
+
+    <form method="post">
+        {% csrf_token %} {# Django security token for forms #}
+        <button type="submit" class="btn btn-danger me-2">Yes, Delete</button>
+        <a href="{% url 'product_list' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+{% endblock %}

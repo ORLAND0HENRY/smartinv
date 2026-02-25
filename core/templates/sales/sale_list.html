@@ -1,0 +1,46 @@
+{# sales_inventory_system/core/templates/sales/sale_list.html #}
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - Inventory System{% endblock %}
+
+{% block content %}
+    <h1 class="mb-4">{{ title }}</h1>
+
+    <div class="card p-4 shadow-sm">
+        {% if sales %}
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th scope="col">Sale ID</th>
+                            <th scope="col">Date & Time</th>
+                            <th scope="col">Total Amount</th>
+                            <th scope="col">Number of Items</th>
+                            <th scope="col">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sale in sales %}
+                            <tr>
+                                <td>{{ sale.id }}</td>
+                                <td>{{ sale.sale_date|date:"F j, Y, P" }}</td> {# Format date beautifully #}
+                                <td>
+                                    <span class="badge bg-success fs-6">${{ sale.total_amount|floatformat:2 }}</span>
+                                </td>
+                                <td>{{ sale.saleitem_set.count }}</td> {# Counts related SaleItems #}
+                                <td>
+                                    {# This 'View Details' link should now be active and correctly point to the sale_detail view #}
+                                    <a href="{% url 'sale_detail' pk=sale.id %}" class="btn btn-sm btn-info">View Details</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="alert alert-info" role="alert">
+                No sales recorded yet. Start by <a href="{% url 'record_sale' %}" class="alert-link">recording a new sale</a>!
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
