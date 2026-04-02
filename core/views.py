@@ -1,12 +1,15 @@
+import logging
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.db import transaction
 from django.db.models import Sum, Count
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from .models import Product, Category, Sale, SaleItem
 from .forms import ProductForm, CustomUserCreationForm, SaleForm, SaleItemFormSet
+
+logger = logging.getLogger(__name__)
 
 
 def index(request):
@@ -17,7 +20,6 @@ def index(request):
 def dashboard(request):
     today = timezone.now()
 
-    # Optimized aggregation for current month
     stats = Sale.objects.filter(
         sale_date__year=today.year,
         sale_date__month=today.month
@@ -43,7 +45,6 @@ def dashboard(request):
 
 @login_required
 def product_list(request):
-    # select_related reduces SQL hits for category foreign keys
     products = Product.objects.select_related('category').all()
     return render(request, 'products/product_list.html', {
         'products': products,
@@ -51,7 +52,8 @@ def product_list(request):
     })
 
 
-@login_required
+
+@permission_required('core.add_product', raise_exception=True)
 def add_product(request):
     form = ProductForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
@@ -64,7 +66,7 @@ def add_product(request):
     })
 
 
-@login_required
+@permission_required('core.change_product', raise_exception=True)
 def edit_product(request, pk):
     product = get_object_or_404(Product, pk=pk)
     form = ProductForm(request.POST or None, instance=product)
@@ -79,7 +81,7 @@ def edit_product(request, pk):
     })
 
 
-@login_required
+@permission_required('core.delete_product', raise_exception=True)
 def delete_product(request, pk):
     product = get_object_or_404(Product, pk=pk)
     if request.method == 'POST':
@@ -93,6 +95,9 @@ def delete_product(request, pk):
 
 
 def register(request):
+    if request.user.is_authenticated:
+        return redirect('index')
+
     form = CustomUserCreationForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         user = form.save()
@@ -105,7 +110,7 @@ def register(request):
     })
 
 
-@login_required
+@permission_required('core.add_sale', raise_exception=True)
 def record_sale(request):
     form = SaleForm(request.POST or None)
     formset = SaleItemFormSet(request.POST or None, prefix='sale_items')
@@ -121,14 +126,15 @@ def record_sale(request):
                     items = formset.save(commit=False)
                     for item in items:
                         item.sale = sale
-                        item.save()  # Triggers stock deduction in Model.save()
+                        item.save()
 
                     sale.update_total()
                 return redirect('sale_list')
             except ValidationError as e:
                 form.add_error(None, e.message)
             except Exception as e:
-                form.add_error(None, f"Transaction failed: {str(e)}")
+                logger.error(f"Transaction failed during record_sale: {str(e)}", exc_info=True)
+                form.add_error(None, "An unexpected error occurred while processing the sale. Please contact support.")
 
     return render(request, 'sales/record_sale.html', {
         'form': form,
@@ -148,8 +154,7 @@ def sale_list(request):
 
 @login_required
 def sale_detail(request, pk):
-
-    sale = get_object_or_404(Sale.objects.prefetch_related('items__product'), pk=pk)
+    sale = get_object_or_404(Sale.objects.prefetch_related('items__product', 'user'), pk=pk)
     return render(request, 'sales/sale_detail.html', {
         'sale': sale,
         'title': f'Sale Details #{sale.id}'
