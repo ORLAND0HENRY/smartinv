@@ -1,39 +1,31 @@
-# 📈 Smart Inventory: Predictive SME Analytics Engine
+# Smart Inventory
 
-**Smart Inventory** is an advanced resource planning and sales tracking system built to empower SMEs with data-driven decision-making. By leveraging real-time database aggregations and atomic transaction processing, it ensures total data integrity for business operations.
+A Django application for managing product stock, recording sales, and reviewing business activity.
 
-## 🚀 Key Features
+## Features
 
-### 1. Real-Time Business Intelligence
-The central dashboard provides an immediate snapshot of organizational health:
-* **Monthly Performance:** Automated tracking of sale counts and revenue for the current month[cite: 1].
-* **Stock Health Monitoring:** Priority listing of low-stock items (quantity $\le 10$) to prevent supply chain disruptions[cite: 1].
-* **Valuation Analytics:** Instant calculation of total inventory value and overall sales performance[cite: 1].
+- Inventory catalog with name/SKU search, category and stock-status filters, and pagination.
+- Product-level reorder thresholds and a dashboard that highlights low/out-of-stock items.
+- Dashboard KPIs for monthly sales, inventory value, and recent transactions.
+- Atomic sale processing with server-side price snapshots and concurrency-safe stock deductions.
+- Product changes and sale creation are guarded by Django model permissions.
+- Bootstrap-based responsive interface, accessible navigation, and printable sale receipts.
 
-### 2. Atomic Sales Processing
-To ensure financial accuracy, the system implements a robust "all-or-nothing" transaction protocol:
-* **`transaction.atomic`:** Guarantees that sales records and multiple line items are saved simultaneously; if one fails, the entire transaction rolls back to prevent data corruption[cite: 1].
-* **Dynamic Totaling:** Automatically updates the `sale.total_amount` server-side after items are confirmed, ensuring consistency between line items and global records[cite: 1].
+## Local setup
 
-### 3. High-Performance Query Architecture
-Designed for scalability, the system optimizes database interaction to handle large inventories:
-* **$N+1$ Prevention:** Utilizes `select_related` for categories and users to fetch related data in a single SQL join[cite: 1].
-* **Efficient Lookups:** Uses `prefetch_related` for nested many-to-many relationships (Sale Items $\to$ Products) to keep the UI snappy even with deep transaction history[cite: 1].
+1. Use Python 3.10+ and create/activate a virtual environment.
+2. Install dependencies: `pip install -r requirements.txt`.
+3. Copy `.env.example` to `.env`, generate a unique Django `SECRET_KEY`, and set `DEBUG=True` only for local development.
+4. Run `python manage.py migrate` and `python manage.py createsuperuser`.
+5. Run `python manage.py runserver` and sign in at `/accounts/login/`.
+6. Assign product and sale permissions to users in Django admin. New accounts do not receive inventory permissions automatically.
 
-## 🛠️ Technical Stack
-* **Backend:** Python / Django 5.0[cite: 1].
-* **Database Logic:** PostgreSQL-ready with advanced Django ORM aggregations (`Sum`, `Count`)[cite: 1].
-* **Security:** Integrated `permission_required` decorators to gate sensitive actions like deleting products or recording sales[cite: 1].
-* **Logging:** Comprehensive `logging` integration to track and debug transaction failures in production environments[cite: 1].
+## Configuration and deployment
 
-## 📂 View Logic Implementation Detail
+`SECRET_KEY` is required from the environment and must not be committed. Set `DEBUG=False` and configure `ALLOWED_HOSTS` for deployment. HTTPS, secure session/CSRF cookies, HSTS, content-type protection, same-site cookies, and frame denial are enabled by default when debug is off. Only enable HTTPS/HSTS when the application is served behind correctly configured HTTPS.
 
-| View | Strategy | Technical Highlight |
-| :--- | :--- | :--- |
-| `dashboard` | Statistical Aggregation | Merges `Count` and `Sum` in a single query filter[cite: 1]. |
-| `record_sale` | Atomic Formsets | Manages complex parent-child relationships securely[cite: 1]. |
-| `sale_detail` | Data Prefetching | Minimizes database hits for high-detail audit logs[cite: 1]. |
+The default database is SQLite. Optional database settings are listed in `.env.example`; for PostgreSQL, install the appropriate psycopg driver and provide the database credentials through environment variables. Run `python manage.py check --deploy` before releasing.
 
----
-**Developed by:** Orlantech Innovations 
-**Theme:** Amber-500 Signature
+## Tests
+
+Run `python manage.py test`. Tests cover sale stock deduction and price snapshots, overselling protection, inventory search, permissions, and positive pricing.

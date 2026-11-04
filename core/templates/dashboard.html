@@ -1,85 +1,20 @@
 {% extends 'base.html' %}
 {% block title %}Dashboard | Smart Invent{% endblock %}
-
 {% block content %}
 <div class="container">
-    <div class="d-sm-flex align-items-center justify-content-between mb-4">
-        <h1 class="h3 mb-0 text-dark fw-bold">Executive Overview</h1>
-        <a href="{% url 'record_sale' %}" class="btn btn-amber shadow-sm">
-            <i class="bi bi-plus-lg me-1"></i> New Sale
-        </a>
+    <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3 mb-4">
+        <div><p class="text-uppercase text-amber fw-bold small mb-1">Business snapshot</p><h1 class="h2 page-heading mb-0">Good day, {{ user.first_name|default:user.username }}</h1><p class="text-secondary mb-0">Here’s what’s happening with your inventory.</p></div>
+        <div class="d-flex gap-2"><a href="{% url 'product_list' %}" class="btn btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Inventory</a><a href="{% url 'record_sale' %}" class="btn btn-amber"><i class="bi bi-plus-lg me-1"></i>Record sale</a></div>
     </div>
-
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3"><div class="card kpi-card"><div class="d-flex justify-content-between align-items-start"><span class="text-secondary small fw-semibold">Products</span><span class="kpi-icon"><i class="bi bi-box-seam"></i></span></div><div class="fs-3 fw-bold mt-2">{{ total_products }}</div><a class="small text-decoration-none" href="{% url 'product_list' %}">View inventory <i class="bi bi-arrow-right"></i></a></div></div>
+        <div class="col-6 col-xl-3"><div class="card kpi-card"><div class="d-flex justify-content-between align-items-start"><span class="text-secondary small fw-semibold">Revenue this month</span><span class="kpi-icon"><i class="bi bi-graph-up-arrow"></i></span></div><div class="fs-4 fw-bold mt-2">KES {{ total_monthly_sales_amount|floatformat:2 }}</div><div class="small text-secondary">{{ total_monthly_sales_count }} transaction{{ total_monthly_sales_count|pluralize }}</div></div></div>
+        <div class="col-6 col-xl-3"><div class="card kpi-card"><div class="d-flex justify-content-between align-items-start"><span class="text-secondary small fw-semibold">Inventory value</span><span class="kpi-icon"><i class="bi bi-currency-exchange"></i></span></div><div class="fs-4 fw-bold mt-2">KES {{ inventory_value|floatformat:2 }}</div><div class="small text-secondary">At current unit prices</div></div></div>
+        <div class="col-6 col-xl-3"><div class="card kpi-card"><div class="d-flex justify-content-between align-items-start"><span class="text-secondary small fw-semibold">Stock alerts</span><span class="kpi-icon"><i class="bi bi-exclamation-triangle"></i></span></div><div class="fs-3 fw-bold mt-2">{{ low_stock_count }}</div><div class="small text-secondary">At or below reorder level</div></div></div>
+    </div>
     <div class="row g-4">
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm border-start border-amber border-4 h-100 py-2">
-                <div class="card-body">
-                    <div class="text-xs fw-bold text-amber text-uppercase mb-1">Monthly Revenue</div>
-                    <div class="h5 mb-0 fw-bold text-secondary">KES {{ total_monthly_sales_amount|default:"0" }}</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm border-start border-danger border-4 h-100 py-2">
-                <div class="card-body">
-                    <div class="text-xs fw-bold text-danger text-uppercase mb-1">Low Stock Items</div>
-                    <div class="h5 mb-0 fw-bold text-secondary">{{ low_stock_count|default:"0" }} Alerts</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-6 col-md-12">
-            <div class="card border-0 shadow-sm border-start border-info border-4 h-100 py-2">
-                <div class="card-body">
-                    <div class="text-xs fw-bold text-info text-uppercase mb-1">Smart Forecast</div>
-                    <div class="row mt-2">
-                        {% for item in predictions %}
-                        <div class="col-6 small">
-                            <span class="text-dark fw-bold">{{ item.product.name }}:</span>
-                            <span class="text-muted">Out in ~{{ item.days_left }} days</span>
-                        </div>
-                        {% empty %}
-                        <div class="col-12 small text-muted">No velocity data yet.</div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mt-5">
-        <div class="col-lg-8">
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white py-3">
-                    <h6 class="m-0 fw-bold text-dark">Recent Activity</h6>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table align-middle mb-0">
-                            <thead class="bg-light">
-                                <tr>
-                                    <th>Transaction</th>
-                                    <th>Total</th>
-                                    <th>Date</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for sale in recent_sales %}
-                                <tr>
-                                    <td class="fw-bold">Sale #{{ sale.id }}</td>
-                                    <td class="text-amber fw-bold">KES {{ sale.total_amount }}</td>
-                                    <td class="small text-muted">{{ sale.sale_date|date:"M d, H:i" }}</td>
-                                </tr>
-                                {% empty %}
-                                <tr><td colspan="3" class="text-center py-4 text-muted">No recent sales.</td></tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <div class="col-lg-7"><section class="card overflow-hidden h-100"><div class="d-flex justify-content-between align-items-center p-3 p-lg-4 border-bottom"><div><h2 class="h5 fw-bold mb-1">Recent sales</h2><p class="small text-secondary mb-0">Latest recorded transactions</p></div><a href="{% url 'sale_list' %}" class="small text-decoration-none">View all</a></div><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Transaction</th><th>Date</th><th class="text-end">Total</th></tr></thead><tbody>{% for sale in recent_sales %}<tr><td><a class="fw-semibold text-decoration-none" href="{% url 'sale_detail' sale.pk %}">#TRX-{{ sale.id|stringformat:"05d" }}</a></td><td class="small text-secondary">{{ sale.sale_date|date:"M d, Y · H:i" }}</td><td class="text-end fw-bold">KES {{ sale.total_amount|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="3" class="text-center py-5 text-secondary"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No sales yet. Your sales will appear here.</td></tr>{% endfor %}</tbody></table></div></section></div>
+        <div class="col-lg-5"><section class="card h-100"><div class="d-flex justify-content-between align-items-center p-3 p-lg-4 border-bottom"><div><h2 class="h5 fw-bold mb-1">Needs attention</h2><p class="small text-secondary mb-0">Products at or below reorder level</p></div><span class="badge text-bg-warning">{{ low_stock_count }}</span></div><div class="list-group list-group-flush">{% for product in low_stock_products %}<div class="list-group-item d-flex justify-content-between align-items-center px-3 px-lg-4 py-3"><div class="me-3"><div class="fw-semibold">{{ product.name }}</div><div class="small text-secondary">{{ product.sku }}</div></div><span class="badge {% if product.stock_quantity == 0 %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ product.stock_quantity }} left</span></div>{% empty %}<div class="text-center text-secondary py-5"><i class="bi bi-check-circle fs-3 d-block mb-2 text-success"></i>All products are above their reorder level.</div>{% endfor %}</div></section></div>
     </div>
 </div>
 {% endblock %}
