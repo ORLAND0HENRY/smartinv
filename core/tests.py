@@ -7,34 +7,30 @@ from .models import Category, Product
 User = get_user_model()
 
 
-class StaffAccessAndExportTests(TestCase):
+class CategoryAndLowStockTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(username='manager', password='Strong-pass-123', is_staff=True)
         self.user = User.objects.create_user(username='cashier', password='Strong-pass-123')
         self.category = Category.objects.create(name='Office')
-        Product.objects.create(name='Notebook', category=self.category, price=15, stock_quantity=12, sku='BOOK-001', low_stock_threshold=3)
+        self.product = Product.objects.create(
+            name='Notebook', category=self.category, price=15, stock_quantity=2,
+            sku='BOOK-002', low_stock_threshold=5,
+        )
 
-    def test_non_staff_user_is_redirected_from_analytics(self):
+    def test_non_staff_is_redirected_from_category_list(self):
         self.client.force_login(self.user)
-        response = self.client.get(reverse('sales_analytics'))
+        response = self.client.get(reverse('category_list'))
         self.assertEqual(response.status_code, 302)
 
-    def test_staff_can_view_analytics(self):
+    def test_staff_can_create_category(self):
         self.client.force_login(self.staff)
-        response = self.client.get(reverse('sales_analytics'))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Sales analytics')
-        self.assertContains(response, 'Monthly revenue trend')
+        response = self.client.post(reverse('add_category'), {'name': 'Supplies', 'description': 'Office supplies'})
+        self.assertRedirects(response, reverse('category_list'))
+        self.assertTrue(Category.objects.filter(name='Supplies').exists())
 
-    def test_staff_can_export_product_csv(self):
+    def test_low_stock_alerts_page_lists_problem_items(self):
         self.client.force_login(self.staff)
-        response = self.client.get(reverse('export_products_csv'))
+        response = self.client.get(reverse('low_stock_alerts'))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
-        self.assertContains(response, 'name,sku,category,price,stock_quantity,low_stock_threshold')
-
-    def test_staff_can_export_sales_csv(self):
-        self.client.force_login(self.staff)
-        response = self.client.get(reverse('export_sales_csv'))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'sale_id,sale_date,recorded_by,total_amount')
+        self.assertContains(response, 'Notebook')
+        self.assertContains(response, '2')

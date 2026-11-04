@@ -4,7 +4,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
 from django.forms import BaseInlineFormSet, inlineformset_factory
 
-from .models import Product, Sale, SaleItem
+from .models import Category, Product, Sale, SaleItem
 
 User = get_user_model()
 
@@ -20,6 +20,13 @@ class BootstrapFormMixin:
             field.widget.attrs['class'] = f'{existing} {css_class}'.strip()
             if field.required:
                 field.widget.attrs.setdefault('aria-required', 'true')
+
+
+class CategoryForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = Category
+        fields = ['name', 'description']
+        widgets = {'description': forms.Textarea(attrs={'rows': 3})}
 
 
 class ProductForm(BootstrapFormMixin, forms.ModelForm):

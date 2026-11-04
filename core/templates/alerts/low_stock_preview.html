@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} | Smart Invent{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <section class="card p-4 p-lg-5">
+                <h1 class="h3 fw-bold mb-3">Low-stock alert preview</h1>
+                <pre class="bg-light p-3 rounded mb-0">{{ message }}</pre>
+                <form method="post" class="mt-4">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-amber">Send alert email</button>
+                    <a href="{% url 'low_stock_alerts' %}" class="btn btn-outline-secondary ms-2">Back to alerts</a>
+                </form>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}

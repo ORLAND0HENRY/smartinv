@@ -5,19 +5,18 @@ from decimal import Decimal
 from functools import wraps
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
-from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, F, Sum
-from django.db.models.functions import TruncMonth
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .forms import CustomUserCreationForm, ProductForm, SaleForm, SaleItemFormSet
+from .forms import CategoryForm, CustomUserCreationForm, ProductForm, SaleForm, SaleItemFormSet
 from .models import Category, Product, Sale, SaleItem
 
 logger = logging.getLogger(__name__)
@@ -55,6 +54,10 @@ def dashboard(request):
         revenue=Sum(F('quantity') * F('price_at_sale')),
     ).order_by('-total_quantity')[:5]
 
+    reorder_recommendations = Product.objects.filter(
+        stock_quantity__lte=F('low_stock_threshold')
+    ).select_related('category').order_by('stock_quantity')[:5]
+
     context = {
         'total_products': Product.objects.count(),
         'total_sales_overall': Sale.objects.count(),
@@ -62,6 +65,7 @@ def dashboard(request):
         'inventory_value': inventory_value,
         'low_stock_products': low_stock_products[:8],
         'low_stock_count': low_stock_products.count(),
+        'reorder_recommendations': reorder_recommendations,
         'recent_products': Product.objects.select_related('category').order_by('-created_at')[:5],
         'recent_sales': Sale.objects.select_related('user').order_by('-sale_date')[:5],
         'total_monthly_sales_count': monthly_stats['count'] or 0,
@@ -134,6 +138,93 @@ def export_sales_csv(request):
             format(sale.total_amount, '.2f'),
         ])
     return response
+
+
+@staff_only
+def category_list(request):
+    categories = Category.objects.order_by('name')
+    return render(request, 'categories/category_list.html', {
+        'categories': categories,
+        'title': 'Categories',
+    })
+
+
+@staff_only
+def add_category(request):
+    form = CategoryForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        category = form.save()
+        messages.success(request, f'Category “{category.name}” created.')
+        return redirect('category_list')
+    return render(request, 'categories/category_form.html', {
+        'form': form,
+        'title': 'Add Category',
+    })
+
+
+@staff_only
+def edit_category(request, pk):
+    category = get_object_or_404(Category, pk=pk)
+    form = CategoryForm(request.POST or None, instance=category)
+    if request.method == 'POST' and form.is_valid():
+        category = form.save()
+        messages.success(request, f'Category “{category.name}” updated.')
+        return redirect('category_list')
+    return render(request, 'categories/category_form.html', {
+        'form': form,
+        'category': category,
+        'title': 'Edit Category',
+    })
+
+
+@staff_only
+def delete_category(request, pk):
+    category = get_object_or_404(Category, pk=pk)
+    if request.method == 'POST':
+        category.delete()
+        messages.success(request, 'Category deleted.')
+        return redirect('category_list')
+    return render(request, 'categories/category_confirm_delete.html', {
+        'category': category,
+        'title': 'Delete Category',
+    })
+
+
+@staff_only
+def low_stock_alerts(request):
+    products = Product.objects.filter(
+        stock_quantity__lte=F('low_stock_threshold')
+    ).select_related('category').order_by('stock_quantity', 'name')
+    context = {
+        'products': products,
+        'title': 'Low Stock Alerts',
+    }
+    return render(request, 'alerts/low_stock.html', context)
+
+
+@staff_only
+def send_low_stock_alerts(request):
+    products = Product.objects.filter(stock_quantity__lte=F('low_stock_threshold')).select_related('category')
+    message = []
+    for product in products:
+        message.append(f'{product.name} ({product.sku}): {product.stock_quantity} left; reorder threshold {product.low_stock_threshold}.')
+    if not products:
+        message.append('No low-stock items at this time.')
+    if request.method == 'POST':
+        if hasattr(request, 'user') and getattr(request.user, 'email', None):
+            from django.core.mail import send_mail
+            send_mail(
+                'SmartInvent low-stock alert',
+                '\n'.join(message),
+                'noreply@smartinv.local',
+                [request.user.email],
+                fail_silently=True,
+            )
+            messages.success(request, 'Low-stock alert email sent.')
+        else:
+            messages.warning(request, 'No email is configured for this user. Alert preview shown on screen.')
+        return redirect('low_stock_alerts')
+    return render(request, 'alerts/low_stock_preview.html', {'message': '\n'.join(message), 'title': 'Low Stock Alert Preview'})
 
 
 @login_required
@@ -251,8 +342,8 @@ def sale_detail(request, pk):
 def sales_analytics(request):
     current = timezone.now().replace(day=1)
     monthly_trend = []
-    months = []
     max_value = Decimal('0.01')
+    months = []
 
     for offset in range(5, -1, -1):
         month_start = current.replace(month=((current.month - offset - 1) % 12) + 1, year=current.year + ((current.month - offset - 1) // 12))
