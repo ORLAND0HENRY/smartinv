@@ -4,7 +4,7 @@
 <div class="container">
     <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-3 mb-4">
         <div><p class="text-uppercase text-amber fw-bold small mb-1">Business snapshot</p><h1 class="h2 page-heading mb-0">Good day, {{ user.first_name|default:user.username }}</h1><p class="text-secondary mb-0">Here’s what’s happening with your inventory.</p></div>
-        <div class="d-flex gap-2"><a href="{% url 'product_list' %}" class="btn btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Inventory</a><a href="{% url 'record_sale' %}" class="btn btn-amber"><i class="bi bi-plus-lg me-1"></i>Record sale</a></div>
+        <div class="d-flex gap-2 flex-wrap"><a href="{% url 'product_list' %}" class="btn btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Inventory</a><a href="{% url 'record_sale' %}" class="btn btn-amber"><i class="bi bi-plus-lg me-1"></i>Record sale</a>{% if user.is_staff %}<a href="{% url 'sales_analytics' %}" class="btn btn-outline-amber"><i class="bi bi-bar-chart-line-fill me-1"></i>Reports</a>{% endif %}</div>
     </div>
     <div class="row g-3 mb-4">
         <div class="col-6 col-xl-3"><div class="card kpi-card"><div class="d-flex justify-content-between align-items-start"><span class="text-secondary small fw-semibold">Products</span><span class="kpi-icon"><i class="bi bi-box-seam"></i></span></div><div class="fs-3 fw-bold mt-2">{{ total_products }}</div><a class="small text-decoration-none" href="{% url 'product_list' %}">View inventory <i class="bi bi-arrow-right"></i></a></div></div>
@@ -16,5 +16,24 @@
         <div class="col-lg-7"><section class="card overflow-hidden h-100"><div class="d-flex justify-content-between align-items-center p-3 p-lg-4 border-bottom"><div><h2 class="h5 fw-bold mb-1">Recent sales</h2><p class="small text-secondary mb-0">Latest recorded transactions</p></div><a href="{% url 'sale_list' %}" class="small text-decoration-none">View all</a></div><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Transaction</th><th>Date</th><th class="text-end">Total</th></tr></thead><tbody>{% for sale in recent_sales %}<tr><td><a class="fw-semibold text-decoration-none" href="{% url 'sale_detail' sale.pk %}">#TRX-{{ sale.id|stringformat:"05d" }}</a></td><td class="small text-secondary">{{ sale.sale_date|date:"M d, Y · H:i" }}</td><td class="text-end fw-bold">KES {{ sale.total_amount|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="3" class="text-center py-5 text-secondary"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No sales yet. Your sales will appear here.</td></tr>{% endfor %}</tbody></table></div></section></div>
         <div class="col-lg-5"><section class="card h-100"><div class="d-flex justify-content-between align-items-center p-3 p-lg-4 border-bottom"><div><h2 class="h5 fw-bold mb-1">Needs attention</h2><p class="small text-secondary mb-0">Products at or below reorder level</p></div><span class="badge text-bg-warning">{{ low_stock_count }}</span></div><div class="list-group list-group-flush">{% for product in low_stock_products %}<div class="list-group-item d-flex justify-content-between align-items-center px-3 px-lg-4 py-3"><div class="me-3"><div class="fw-semibold">{{ product.name }}</div><div class="small text-secondary">{{ product.sku }}</div></div><span class="badge {% if product.stock_quantity == 0 %}text-bg-danger{% else %}text-bg-warning{% endif %}">{{ product.stock_quantity }} left</span></div>{% empty %}<div class="text-center text-secondary py-5"><i class="bi bi-check-circle fs-3 d-block mb-2 text-success"></i>All products are above their reorder level.</div>{% endfor %}</div></section></div>
     </div>
+    {% if user.is_staff %}
+    <div class="row mt-4 g-3">
+        <div class="col-lg-6">
+            <section class="card p-3 p-lg-4">
+                <div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 fw-bold mb-0">Top movers</h2><a href="{% url 'sales_analytics' %}" class="small text-decoration-none">Full analytics</a></div>
+                <div class="list-group list-group-flush">
+                    {% for item in top_items %}
+                    <div class="list-group-item px-0 py-2">
+                        <div class="d-flex justify-content-between"><span class="fw-semibold">{{ item.product__name }}</span><span class="small text-secondary">{{ item.total_quantity }} sold</span></div>
+                        <div class="small text-secondary">KES {{ item.revenue|floatformat:2 }}</div>
+                    </div>
+                    {% empty %}
+                    <div class="text-secondary small">No sales activity yet.</div>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

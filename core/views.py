@@ -1,20 +1,35 @@
+import csv
 import logging
+from datetime import date
 from decimal import Decimal
+from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth import login
-from django.contrib.auth.decorators import login_required, permission_required
+from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, F, Sum
+from django.db.models.functions import TruncMonth
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .forms import CustomUserCreationForm, ProductForm, SaleForm, SaleItemFormSet
-from .models import Category, Product, Sale
+from .models import Category, Product, Sale, SaleItem
 
 logger = logging.getLogger(__name__)
+
+
+def staff_only(view_func):
+    @wraps(view_func)
+    @login_required
+    @user_passes_test(lambda user: user.is_staff, login_url='dashboard')
+    def _wrapped(request, *args, **kwargs):
+        return view_func(request, *args, **kwargs)
+    return _wrapped
 
 
 def index(request):
@@ -35,6 +50,11 @@ def dashboard(request):
         stock_quantity__lte=F('low_stock_threshold'),
     ).select_related('category').order_by('stock_quantity', 'name')
 
+    top_items = SaleItem.objects.values('product__name', 'product__sku').annotate(
+        total_quantity=Sum('quantity'),
+        revenue=Sum(F('quantity') * F('price_at_sale')),
+    ).order_by('-total_quantity')[:5]
+
     context = {
         'total_products': Product.objects.count(),
         'total_sales_overall': Sale.objects.count(),
@@ -46,6 +66,7 @@ def dashboard(request):
         'recent_sales': Sale.objects.select_related('user').order_by('-sale_date')[:5],
         'total_monthly_sales_count': monthly_stats['count'] or 0,
         'total_monthly_sales_amount': monthly_stats['amount'] or Decimal('0.00'),
+        'top_items': top_items,
         'title': 'Dashboard',
     }
     return render(request, 'dashboard.html', context)
@@ -79,6 +100,40 @@ def product_list(request):
         'selected_stock': stock_status,
         'title': 'Product List',
     })
+
+
+@staff_only
+def export_products_csv(request):
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="smartinv_products.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['name', 'sku', 'category', 'price', 'stock_quantity', 'low_stock_threshold'])
+    for product in Product.objects.select_related('category').order_by('name'):
+        writer.writerow([
+            product.name,
+            product.sku,
+            product.category.name if product.category else '',
+            format(product.price, '.2f'),
+            product.stock_quantity,
+            product.low_stock_threshold,
+        ])
+    return response
+
+
+@staff_only
+def export_sales_csv(request):
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="smartinv_sales.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['sale_id', 'sale_date', 'recorded_by', 'total_amount'])
+    for sale in Sale.objects.select_related('user').order_by('-sale_date'):
+        writer.writerow([
+            sale.pk,
+            sale.sale_date.strftime('%Y-%m-%d %H:%M:%S'),
+            sale.user.get_full_name() or sale.user.username,
+            format(sale.total_amount, '.2f'),
+        ])
+    return response
 
 
 @login_required
@@ -190,3 +245,60 @@ def sale_detail(request, pk):
         'sale': sale,
         'title': f'Sale Details #{sale.id}',
     })
+
+
+@staff_only
+def sales_analytics(request):
+    current = timezone.now().replace(day=1)
+    monthly_trend = []
+    months = []
+    max_value = Decimal('0.01')
+
+    for offset in range(5, -1, -1):
+        month_start = current.replace(month=((current.month - offset - 1) % 12) + 1, year=current.year + ((current.month - offset - 1) // 12))
+        month_label = month_start.strftime('%b %Y')
+        month_total = Sale.objects.filter(
+            sale_date__year=month_start.year,
+            sale_date__month=month_start.month,
+        ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0.00')
+        months.append((month_label, float(month_total)))
+        if month_total > max_value:
+            max_value = month_total
+
+    for label, value in months:
+        monthly_trend.append({
+            'label': label,
+            'value': value,
+            'percentage': round((value / max_value) * 100 if max_value else 0, 1),
+        })
+
+    top_products = SaleItem.objects.values('product__name', 'product__sku').annotate(
+        total_quantity=Sum('quantity'),
+        revenue=Sum(F('quantity') * F('price_at_sale')),
+    ).order_by('-total_quantity')[:5]
+
+    totals = Sale.objects.aggregate(
+        total_revenue=Sum('total_amount'),
+        total_orders=Count('id'),
+    )
+    avg_order_value = (totals['total_revenue'] / totals['total_orders']) if totals['total_orders'] else Decimal('0.00')
+
+    context = {
+        'monthly_trend': monthly_trend,
+        'top_products': top_products,
+        'total_revenue': totals['total_revenue'] or Decimal('0.00'),
+        'total_orders': totals['total_orders'] or 0,
+        'average_order_value': avg_order_value,
+        'title': 'Sales Analytics',
+    }
+    return render(request, 'reports/analytics.html', context)
+
+
+@staff_only
+def sales_report(request):
+    sales = Sale.objects.select_related('user').order_by('-sale_date')
+    context = {
+        'sales': sales,
+        'title': 'Sales Report',
+    }
+    return render(request, 'reports/sales_report.html', context)

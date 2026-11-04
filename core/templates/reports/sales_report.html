@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} | Smart Invent{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
+        <div>
+            <p class="text-uppercase text-amber fw-bold small mb-1">Reports</p>
+            <h1 class="h2 page-heading mb-0">Sales report</h1>
+        </div>
+        <a href="{% url 'export_sales_csv' %}" class="btn btn-amber"><i class="bi bi-download me-1"></i>Export CSV</a>
+    </div>
+    <section class="card overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Sale ID</th><th>Recorded by</th><th>Date</th><th class="text-end">Total</th></tr></thead>
+                <tbody>
+                    {% for sale in sales %}
+                    <tr><td class="fw-semibold">#TRX-{{ sale.id|stringformat:"05d" }}</td><td>{{ sale.user.get_full_name|default:sale.user.username }}</td><td>{{ sale.sale_date|date:"d M Y, H:i" }}</td><td class="text-end fw-bold">KES {{ sale.total_amount|floatformat:2 }}</td></tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-secondary py-5">No sales have been recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

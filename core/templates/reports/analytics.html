@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} | Smart Invent{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
+        <div>
+            <p class="text-uppercase text-amber fw-bold small mb-1">Overview</p>
+            <h1 class="h2 page-heading mb-0">Sales analytics</h1>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'sales_report' %}" class="btn btn-outline-secondary">Detailed report</a>
+            <a href="{% url 'export_sales_csv' %}" class="btn btn-amber"><i class="bi bi-download me-1"></i>Download CSV</a>
+        </div>
+    </div>
+    <div class="row g-4 mb-4">
+        <div class="col-md-4"><div class="card p-3 h-100"><div class="small text-secondary">Total revenue</div><div class="fs-3 fw-bold">KES {{ total_revenue|floatformat:2 }}</div></div></div>
+        <div class="col-md-4"><div class="card p-3 h-100"><div class="small text-secondary">Orders</div><div class="fs-3 fw-bold">{{ total_orders }}</div></div></div>
+        <div class="col-md-4"><div class="card p-3 h-100"><div class="small text-secondary">Average order value</div><div class="fs-3 fw-bold">KES {{ average_order_value|floatformat:2 }}</div></div></div>
+    </div>
+    <div class="card p-3 p-lg-4">
+        <h2 class="h5 fw-bold mb-3">Monthly revenue trend</h2>
+        <div class="d-flex flex-column gap-3">
+            {% for month in monthly_trend %}
+            <div>
+                <div class="d-flex justify-content-between small text-secondary mb-1"><span>{{ month.label }}</span><span>KES {{ month.value|floatformat:2 }}</span></div>
+                <div class="progress" style="height: 12px;">
+                    <div class="progress-bar bg-warning" role="progressbar" aria-valuenow="{{ month.percentage }}" aria-valuemin="0" aria-valuemax="100" style="width: {{ month.percentage }}%;"></div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-secondary">No sales activity recorded yet.</div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="card mt-4 p-3 p-lg-4">
+        <h2 class="h5 fw-bold mb-3">Top products</h2>
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead><tr><th>Product</th><th>SKU</th><th>Quantity sold</th><th class="text-end">Revenue</th></tr></thead>
+                <tbody>
+                    {% for product in top_products %}
+                    <tr><td class="fw-semibold">{{ product.product__name }}</td><td class="text-secondary">{{ product.product__sku }}</td><td>{{ product.total_quantity }}</td><td class="text-end">KES {{ product.revenue|floatformat:2 }}</td></tr>
+                    {% empty %}
+                    <tr><td colspan="4" class="text-center text-secondary py-4">No product sales recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
