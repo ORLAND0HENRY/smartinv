@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} | Smart Invent{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3 mb-4">
+        <div>
+            <p class="text-uppercase text-amber fw-bold small mb-1">Procurement</p>
+            <h1 class="h2 page-heading mb-0">Purchase orders</h1>
+        </div>
+        <a href="{% url 'add_purchase_order' %}" class="btn btn-amber"><i class="bi bi-plus-lg me-1"></i>New order</a>
+    </div>
+
+    <section class="card overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Supplier</th>
+                        <th>Expected</th>
+                        <th>Status</th>
+                        <th class="text-end">Total</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td class="fw-semibold">#PO-{{ order.id|stringformat:"05d" }}</td>
+                        <td>{{ order.supplier.name }}</td>
+                        <td>{{ order.expected_delivery|date:"d M Y"|default:'—' }}</td>
+                        <td>
+                            {% if order.status == 'received' %}
+                                <span class="badge text-bg-success">Received</span>
+                            {% else %}
+                                <span class="badge text-bg-warning">Ordered</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end fw-semibold">KES {{ order.total_amount|floatformat:2 }}</td>
+                        <td class="text-end text-nowrap">
+                            {% if order.status != 'received' %}
+                                <form method="post" action="{% url 'receive_purchase_order' order.pk %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-outline-success" type="submit">Receive</button></form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center py-5 text-secondary">No purchase orders recorded yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} | Smart Invent{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-6">
+            <section class="card p-4 p-lg-5 text-center">
+                <i class="bi bi-bag-check text-success display-4 mb-3"></i>
+                <h1 class="h3 fw-bold mb-3">Receive order #PO-{{ order.id|stringformat:"05d" }}</h1>
+                <p class="text-secondary">This will add the received quantities to stock for the associated products.</p>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-flex justify-content-center gap-2">
+                        <button type="submit" class="btn btn-success">Confirm receipt</button>
+                        <a href="{% url 'purchase_order_list' %}" class="btn btn-outline-secondary">Back</a>
+                    </div>
+                </form>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}

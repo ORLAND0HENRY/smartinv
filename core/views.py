@@ -1,13 +1,11 @@
 import csv
 import logging
-from datetime import date
 from decimal import Decimal
 from functools import wraps
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model
 from django.contrib.auth import login
-from django.contrib.auth.decorators import login_required, permission_required, user_passes_test
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -16,8 +14,17 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from .forms import CategoryForm, CustomUserCreationForm, ProductForm, SaleForm, SaleItemFormSet
-from .models import Category, Product, Sale, SaleItem
+from .forms import (
+    CategoryForm,
+    CustomUserCreationForm,
+    ProductForm,
+    PurchaseOrderForm,
+    PurchaseOrderItemFormSet,
+    SaleForm,
+    SaleItemFormSet,
+    SupplierForm,
+)
+from .models import Category, Product, PurchaseOrder, Sale, SaleItem, Supplier
 
 logger = logging.getLogger(__name__)
 
@@ -48,15 +55,14 @@ def dashboard(request):
     low_stock_products = Product.objects.filter(
         stock_quantity__lte=F('low_stock_threshold'),
     ).select_related('category').order_by('stock_quantity', 'name')
-
     top_items = SaleItem.objects.values('product__name', 'product__sku').annotate(
         total_quantity=Sum('quantity'),
         revenue=Sum(F('quantity') * F('price_at_sale')),
     ).order_by('-total_quantity')[:5]
-
     reorder_recommendations = Product.objects.filter(
         stock_quantity__lte=F('low_stock_threshold')
     ).select_related('category').order_by('stock_quantity')[:5]
+    open_orders = PurchaseOrder.objects.filter(status='ordered').count()
 
     context = {
         'total_products': Product.objects.count(),
@@ -71,6 +77,7 @@ def dashboard(request):
         'total_monthly_sales_count': monthly_stats['count'] or 0,
         'total_monthly_sales_amount': monthly_stats['amount'] or Decimal('0.00'),
         'top_items': top_items,
+        'open_orders': open_orders,
         'title': 'Dashboard',
     }
     return render(request, 'dashboard.html', context)
@@ -78,7 +85,7 @@ def dashboard(request):
 
 @login_required
 def product_list(request):
-    products = Product.objects.select_related('category')
+    products = Product.objects.select_related('category', 'supplier')
     search = request.GET.get('q', '').strip()
     category_id = request.GET.get('category', '').strip()
     stock_status = request.GET.get('stock', '').strip()
@@ -111,12 +118,13 @@ def export_products_csv(request):
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename="smartinv_products.csv"'
     writer = csv.writer(response)
-    writer.writerow(['name', 'sku', 'category', 'price', 'stock_quantity', 'low_stock_threshold'])
-    for product in Product.objects.select_related('category').order_by('name'):
+    writer.writerow(['name', 'sku', 'category', 'supplier', 'price', 'stock_quantity', 'low_stock_threshold'])
+    for product in Product.objects.select_related('category', 'supplier').order_by('name'):
         writer.writerow([
             product.name,
             product.sku,
             product.category.name if product.category else '',
+            product.supplier.name if product.supplier else '',
             format(product.price, '.2f'),
             product.stock_quantity,
             product.low_stock_threshold,
@@ -143,23 +151,17 @@ def export_sales_csv(request):
 @staff_only
 def category_list(request):
     categories = Category.objects.order_by('name')
-    return render(request, 'categories/category_list.html', {
-        'categories': categories,
-        'title': 'Categories',
-    })
+    return render(request, 'categories/category_list.html', {'categories': categories, 'title': 'Categories'})
 
 
 @staff_only
 def add_category(request):
     form = CategoryForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
-        category = form.save()
-        messages.success(request, f'Category “{category.name}” created.')
+        form.save()
+        messages.success(request, 'Category added.')
         return redirect('category_list')
-    return render(request, 'categories/category_form.html', {
-        'form': form,
-        'title': 'Add Category',
-    })
+    return render(request, 'categories/category_form.html', {'form': form, 'title': 'Add Category'})
 
 
 @staff_only
@@ -167,14 +169,10 @@ def edit_category(request, pk):
     category = get_object_or_404(Category, pk=pk)
     form = CategoryForm(request.POST or None, instance=category)
     if request.method == 'POST' and form.is_valid():
-        category = form.save()
-        messages.success(request, f'Category “{category.name}” updated.')
+        form.save()
+        messages.success(request, 'Category updated.')
         return redirect('category_list')
-    return render(request, 'categories/category_form.html', {
-        'form': form,
-        'category': category,
-        'title': 'Edit Category',
-    })
+    return render(request, 'categories/category_form.html', {'form': form, 'category': category, 'title': 'Edit Category'})
 
 
 @staff_only
@@ -184,47 +182,119 @@ def delete_category(request, pk):
         category.delete()
         messages.success(request, 'Category deleted.')
         return redirect('category_list')
-    return render(request, 'categories/category_confirm_delete.html', {
-        'category': category,
-        'title': 'Delete Category',
-    })
+    return render(request, 'categories/category_confirm_delete.html', {'category': category, 'title': 'Delete Category'})
+
+
+@staff_only
+def supplier_list(request):
+    suppliers = Supplier.objects.order_by('name')
+    return render(request, 'suppliers/supplier_list.html', {'suppliers': suppliers, 'title': 'Suppliers'})
+
+
+@staff_only
+def add_supplier(request):
+    form = SupplierForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        supplier = form.save()
+        messages.success(request, f'Supplier “{supplier.name}��� added.')
+        return redirect('supplier_list')
+    return render(request, 'suppliers/supplier_form.html', {'form': form, 'title': 'Add Supplier'})
+
+
+@staff_only
+def edit_supplier(request, pk):
+    supplier = get_object_or_404(Supplier, pk=pk)
+    form = SupplierForm(request.POST or None, instance=supplier)
+    if request.method == 'POST' and form.is_valid():
+        supplier = form.save()
+        messages.success(request, f'Supplier “{supplier.name}” updated.')
+        return redirect('supplier_list')
+    return render(request, 'suppliers/supplier_form.html', {'form': form, 'supplier': supplier, 'title': 'Edit Supplier'})
+
+
+@staff_only
+def delete_supplier(request, pk):
+    supplier = get_object_or_404(Supplier, pk=pk)
+    if request.method == 'POST':
+        supplier.delete()
+        messages.success(request, 'Supplier removed.')
+        return redirect('supplier_list')
+    return render(request, 'suppliers/supplier_confirm_delete.html', {'supplier': supplier, 'title': 'Delete Supplier'})
+
+
+@staff_only
+def purchase_order_list(request):
+    orders = PurchaseOrder.objects.select_related('supplier').order_by('-order_date')
+    return render(request, 'purchase_orders/order_list.html', {'orders': orders, 'title': 'Purchase Orders'})
+
+
+@staff_only
+def add_purchase_order(request):
+    form = PurchaseOrderForm(request.POST or None)
+    formset = PurchaseOrderItemFormSet(request.POST or None, prefix='items')
+    if request.method == 'POST' and form.is_valid() and formset.is_valid():
+        try:
+            with transaction.atomic():
+                order = form.save(commit=False)
+                order.save()
+                for item in formset.save(commit=False):
+                    if not item.product_id:
+                        continue
+                    item.order = order
+                    item.save()
+                order.update_total()
+            messages.success(request, f'Purchase order #{order.pk} created.')
+            return redirect('purchase_order_list')
+        except ValidationError as error:
+            form.add_error(None, error.messages[0])
+        except Exception:
+            logger.exception('Failed to create purchase order.')
+            form.add_error(None, 'Unable to save the purchase order right now.')
+    return render(request, 'purchase_orders/order_form.html', {'form': form, 'formset': formset, 'title': 'Create Purchase Order'})
+
+
+@staff_only
+def receive_purchase_order(request, pk):
+    order = get_object_or_404(PurchaseOrder.objects.select_related('supplier').prefetch_related('items__product'), pk=pk)
+    if request.method == 'POST':
+        order.receive()
+        messages.success(request, f'Purchase order #{order.pk} received and stock updated.')
+        return redirect('purchase_order_list')
+    return render(request, 'purchase_orders/order_receive.html', {'order': order, 'title': 'Receive Purchase Order'})
 
 
 @staff_only
 def low_stock_alerts(request):
     products = Product.objects.filter(
         stock_quantity__lte=F('low_stock_threshold')
-    ).select_related('category').order_by('stock_quantity', 'name')
-    context = {
-        'products': products,
-        'title': 'Low Stock Alerts',
-    }
-    return render(request, 'alerts/low_stock.html', context)
+    ).select_related('category', 'supplier').order_by('stock_quantity', 'name')
+    return render(request, 'alerts/low_stock.html', {'products': products, 'title': 'Low Stock Alerts'})
 
 
 @staff_only
 def send_low_stock_alerts(request):
-    products = Product.objects.filter(stock_quantity__lte=F('low_stock_threshold')).select_related('category')
-    message = []
+    products = Product.objects.filter(stock_quantity__lte=F('low_stock_threshold')).select_related('category', 'supplier')
+    message_lines = []
     for product in products:
-        message.append(f'{product.name} ({product.sku}): {product.stock_quantity} left; reorder threshold {product.low_stock_threshold}.')
+        message_lines.append(f'{product.name} ({product.sku}) — {product.stock_quantity} units left; reorder level {product.low_stock_threshold}. Supplier: {product.supplier.name if product.supplier else "n/a"}.')
     if not products:
-        message.append('No low-stock items at this time.')
+        message_lines.append('No low-stock items at this time.')
+    message = '\n'.join(message_lines)
     if request.method == 'POST':
-        if hasattr(request, 'user') and getattr(request.user, 'email', None):
+        if getattr(request.user, 'email', ''):
             from django.core.mail import send_mail
             send_mail(
                 'SmartInvent low-stock alert',
-                '\n'.join(message),
+                message,
                 'noreply@smartinv.local',
                 [request.user.email],
                 fail_silently=True,
             )
             messages.success(request, 'Low-stock alert email sent.')
         else:
-            messages.warning(request, 'No email is configured for this user. Alert preview shown on screen.')
+            messages.warning(request, 'No email is configured for this user; preview shown on screen.')
         return redirect('low_stock_alerts')
-    return render(request, 'alerts/low_stock_preview.html', {'message': '\n'.join(message), 'title': 'Low Stock Alert Preview'})
+    return render(request, 'alerts/low_stock_preview.html', {'message': message, 'title': 'Low Stock Alert Preview'})
 
 
 @login_required
@@ -235,10 +305,7 @@ def add_product(request):
         form.save()
         messages.success(request, 'Product added to inventory.')
         return redirect('product_list')
-    return render(request, 'products/product_form.html', {
-        'form': form,
-        'title': 'Add New Product',
-    })
+    return render(request, 'products/product_form.html', {'form': form, 'title': 'Add New Product'})
 
 
 @login_required
@@ -250,11 +317,7 @@ def edit_product(request, pk):
         form.save()
         messages.success(request, 'Product updated.')
         return redirect('product_list')
-    return render(request, 'products/product_form.html', {
-        'form': form,
-        'product': product,
-        'title': 'Edit Product',
-    })
+    return render(request, 'products/product_form.html', {'form': form, 'product': product, 'title': 'Edit Product'})
 
 
 @login_required
@@ -265,10 +328,7 @@ def delete_product(request, pk):
         product.delete()
         messages.success(request, 'Product deleted.')
         return redirect('product_list')
-    return render(request, 'products/product_confirm_delete.html', {
-        'product': product,
-        'title': 'Confirm Delete',
-    })
+    return render(request, 'products/product_confirm_delete.html', {'product': product, 'title': 'Confirm Delete'})
 
 
 def register(request):
@@ -280,10 +340,7 @@ def register(request):
         login(request, user)
         messages.success(request, 'Your account has been created.')
         return redirect('dashboard')
-    return render(request, 'registration/register.html', {
-        'form': form,
-        'title': 'Register',
-    })
+    return render(request, 'registration/register.html', {'form': form, 'title': 'Register'})
 
 
 @login_required
@@ -310,40 +367,27 @@ def record_sale(request):
             logger.exception('Transaction failed while recording a sale.')
             form.add_error(None, 'The sale could not be processed. Please try again or contact support.')
 
-    return render(request, 'sales/record_sale.html', {
-        'form': form,
-        'formset': formset,
-        'title': 'Record Sale',
-    })
+    return render(request, 'sales/record_sale.html', {'form': form, 'formset': formset, 'title': 'Record Sale'})
 
 
 @login_required
 def sale_list(request):
     sales = Sale.objects.select_related('user').order_by('-sale_date')
-    return render(request, 'sales/sale_list.html', {
-        'sales': sales,
-        'title': 'Sales History',
-    })
+    return render(request, 'sales/sale_list.html', {'sales': sales, 'title': 'Sales History'})
 
 
 @login_required
 def sale_detail(request, pk):
-    sale = get_object_or_404(
-        Sale.objects.select_related('user').prefetch_related('items__product'),
-        pk=pk,
-    )
-    return render(request, 'sales/sale_detail.html', {
-        'sale': sale,
-        'title': f'Sale Details #{sale.id}',
-    })
+    sale = get_object_or_404(Sale.objects.select_related('user').prefetch_related('items__product'), pk=pk)
+    return render(request, 'sales/sale_detail.html', {'sale': sale, 'title': f'Sale Details #{sale.id}'})
 
 
 @staff_only
 def sales_analytics(request):
     current = timezone.now().replace(day=1)
     monthly_trend = []
-    max_value = Decimal('0.01')
     months = []
+    max_value = Decimal('0.01')
 
     for offset in range(5, -1, -1):
         month_start = current.replace(month=((current.month - offset - 1) % 12) + 1, year=current.year + ((current.month - offset - 1) // 12))
@@ -368,10 +412,7 @@ def sales_analytics(request):
         revenue=Sum(F('quantity') * F('price_at_sale')),
     ).order_by('-total_quantity')[:5]
 
-    totals = Sale.objects.aggregate(
-        total_revenue=Sum('total_amount'),
-        total_orders=Count('id'),
-    )
+    totals = Sale.objects.aggregate(total_revenue=Sum('total_amount'), total_orders=Count('id'))
     avg_order_value = (totals['total_revenue'] / totals['total_orders']) if totals['total_orders'] else Decimal('0.00')
 
     context = {
@@ -388,8 +429,4 @@ def sales_analytics(request):
 @staff_only
 def sales_report(request):
     sales = Sale.objects.select_related('user').order_by('-sale_date')
-    context = {
-        'sales': sales,
-        'title': 'Sales Report',
-    }
-    return render(request, 'reports/sales_report.html', context)
+    return render(request, 'reports/sales_report.html', {'sales': sales, 'title': 'Sales Report'})
